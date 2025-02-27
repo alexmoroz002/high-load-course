@@ -4,16 +4,19 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.module.kotlin.registerKotlinModule
 import okhttp3.*
 import org.slf4j.LoggerFactory
+import ru.quipy.common.utils.FixedWindowRateLimiter
+import ru.quipy.common.utils.NonBlockingOngoingWindow
+import ru.quipy.common.utils.OngoingWindow
 import ru.quipy.common.utils.SlidingWindowRateLimiter
 import ru.quipy.core.EventSourcingService
 import ru.quipy.payments.api.PaymentAggregate
 import java.net.SocketTimeoutException
 import java.time.Duration
 import java.util.*
+import java.util.concurrent.TimeUnit
 
 
-class RateLimitInterceptor : Interceptor {
-    private val rateLimiter = SlidingWindowRateLimiter(8, Duration.ofSeconds(1))
+class RateLimitInterceptor(private val rateLimiter: FixedWindowRateLimiter) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
         rateLimiter.tickBlocking()
         return chain.proceed(chain.request())
@@ -39,8 +42,11 @@ class PaymentExternalSystemAdapterImpl(
     private val rateLimitPerSec = properties.rateLimitPerSec
     private val parallelRequests = properties.parallelRequests
 
+    private val window = OngoingWindow(parallelRequests)
+    private val rateLimiter = FixedWindowRateLimiter(rateLimitPerSec, 1100, TimeUnit.MILLISECONDS)
+
     private val client = OkHttpClient.Builder()
-        .addInterceptor(RateLimitInterceptor())
+        .addInterceptor(RateLimitInterceptor(rateLimiter))
         .build()
 
 
@@ -62,6 +68,7 @@ class PaymentExternalSystemAdapterImpl(
         }.build()
 
         try {
+            window.acquire()
             client.newCall(request).execute().use { response ->
                 val body = try {
                     mapper.readValue(response.body?.string(), ExternalSysResponse::class.java)
@@ -95,6 +102,8 @@ class PaymentExternalSystemAdapterImpl(
                     }
                 }
             }
+        } finally {
+            window.release()
         }
     }
 
