@@ -43,7 +43,7 @@ class PaymentExternalSystemAdapterImpl(
     private val parallelRequests = properties.parallelRequests
 
     private val window = OngoingWindow(parallelRequests)
-    private val rateLimiter = FixedWindowRateLimiter(rateLimitPerSec, 1100, TimeUnit.MILLISECONDS)
+    private val rateLimiter = FixedWindowRateLimiter(rateLimitPerSec, 1000, TimeUnit.MILLISECONDS)
 
     private val client = OkHttpClient.Builder()
         .addInterceptor(RateLimitInterceptor(rateLimiter))
