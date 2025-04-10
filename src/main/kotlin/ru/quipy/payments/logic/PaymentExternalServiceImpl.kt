@@ -148,18 +148,13 @@ class PaymentExternalSystemAdapterImpl(
                         responseBody = try {
                             mapper.readValue(responseStr, ExternalSysResponse::class.java)
                         } catch (e: Exception) {
-                            logger.error("[$accountName] Ошибка при разборе ответа, код: ${response.code}, тело: $responseStr")
-                            ExternalSysResponse(
-                                transactionId.toString(),
-                                paymentId.toString(),
-                                false,
-                                "Ошибка парсинга JSON"
-                            )
+                            logger.error("[$accountName] [ERROR] Payment processed for txId: $transactionId, payment: $paymentId, result code: ${response.code}, reason: ${response.body?.string()}")
+                            ExternalSysResponse(transactionId.toString(), paymentId.toString(), false, e.message)
                         }
 
                         success = responseBody!!.result
 
-                        if (!success && response.code in listOf(429, 500, 502, 503, 504)) {
+                        if (!success) {
                             attempt++
                             if (attempt < 3) {
                                 val delay = (100L * 2.0.pow(attempt)).toLong()
